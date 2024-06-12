@@ -171,8 +171,8 @@ void Shaper::Slice(const std::string& input,
                    const std::vector<int32_t>& axes,
                    const std::vector<int32_t>& steps,
                    const std::string& output) {
-  std::vector<uint32_t> inputDimen = shape_map_.at(input);
-  std::vector<uint32_t> outputDimen = inputDimen;
+  std::vector<int32_t> inputDimen = shape_map_.at(input);
+  std::vector<int32_t> outputDimen = inputDimen;
   for (size_t i = 0; i < axes.size(); i++) {
     int32_t axis =
         (axes[i] < 0) ? (axes[i] + (int32_t)inputDimen.size()) : axes[i];
@@ -199,8 +199,8 @@ void Shaper::StridedSlice(const std::string& input,
                           const int32_t shrinkAxisMask,
                           const std::string& output) {
   // NHWC
-  std::vector<uint32_t> inputDimen = shape_map_.at(input);
-  std::vector<uint32_t> outputDimen;
+  std::vector<int32_t> inputDimen = shape_map_.at(input);
+  std::vector<int32_t> outputDimen;
   for (size_t i = 0; i < inputDimen.size(); i++) {
     if (shrinkAxisMask & (1 << i)) {
       continue;
@@ -226,7 +226,7 @@ void Shaper::Gather(const std::string& input,
   int32_t input_rank = indicesDimen.size();
   int32_t axis_new = (axis < 0) ? (axis + input_rank) : axis;
 
-  std::vector<uint32_t> outputDimen;
+  std::vector<int32_t> outputDimen;
   outputDimen.reserve(input_rank - 1 + indicesDimen.size());
 
   // replace the dimension for axis with the shape from the indices
@@ -388,7 +388,7 @@ void Shaper::Reshape(const std::string& input,
                      const std::string& output) {
   auto input_dimen = shape_map_.at(input);
   int64_t input_size = std::accumulate(
-      input_dimen.begin(), input_dimen.end(), 1, std::multiplies<uint32_t>());
+      input_dimen.begin(), input_dimen.end(), 1, std::multiplies<int32_t>());
   std::vector<int32_t> output_dimen(shape.size());
 
   int64_t capacity = 1;
@@ -426,7 +426,7 @@ void Shaper::Reshape(const std::string& input,
 
   Shape final_dimen(shape.size());
   for (size_t i = 0; i < shape.size(); i++) {
-    final_dimen[i] = (uint32_t)output_dimen[i];
+    final_dimen[i] = (int32_t)output_dimen[i];
   }
   shape_map_[output] = final_dimen;
 }
@@ -448,7 +448,7 @@ void Shaper::Transpose(const std::string& input,
 void Shaper::Squeeze(const std::string& input,
                      const std::vector<int32_t>& axes,
                      const std::string& output) {
-  std::vector<uint32_t> inputDimen = shape_map_.at(input);
+  std::vector<int32_t> inputDimen = shape_map_.at(input);
   size_t n_axes = axes.size();
   int cnt_squeezed_dims = 0;
   bool should_squeeze[9] = {false};
@@ -472,7 +472,7 @@ void Shaper::Squeeze(const std::string& input,
   }
 
   // Make output dimensions
-  std::vector<uint32_t> outputDimen(inputDimen.size() - cnt_squeezed_dims, 0);
+  std::vector<int32_t> outputDimen(inputDimen.size() - cnt_squeezed_dims, 0);
   for (size_t in_idx = 0, out_idx = 0; in_idx < inputDimen.size(); ++in_idx) {
     if (!should_squeeze[in_idx]) {
       outputDimen[out_idx++] = inputDimen[in_idx];
@@ -485,11 +485,11 @@ void Shaper::Squeeze(const std::string& input,
 void Shaper::Unsqueeze(const std::string& input,
                        const std::vector<int32_t>& axes,
                        const std::string& output) {
-  std::vector<uint32_t> inputDimen = shape_map_.at(input);
+  std::vector<int32_t> inputDimen = shape_map_.at(input);
 
   int output_size = inputDimen.size() + axes.size();
   int cur_output_size = inputDimen.size();
-  std::vector<uint32_t> outputDimen(output_size, 0);
+  std::vector<int32_t> outputDimen(output_size, 0);
 
   for (int axis : axes) {
     int cur = axis;

@@ -14,7 +14,7 @@ namespace rknpu {
  */
 class Shaper {
  public:
-  using len_t = uint32_t;
+  using len_t = int32_t;
   using Shape = std::vector<len_t>;
 
   static len_t total(const Shape& shape);

@@ -61,7 +61,7 @@ class OnnxConverter {
   std::map<std::string, std::shared_ptr<rk::nn::Tensor>> rk_tensors_;
 
   // for GetSupportedNodes
-  std::map<std::string, std::vector<uint32_t>> tensor_dims_;
+  std::map<std::string, std::vector<int32_t>> tensor_dims_;
 
   std::vector<void*> free_list_;  // remember free
 
@@ -71,7 +71,7 @@ class OnnxConverter {
 
   std::shared_ptr<rk::nn::Tensor>
   CreateRknnTensor(const std::string& name,
-                   const std::vector<uint32_t>& dims,
+                   const std::vector<int32_t>& dims,
                    const void* data = NULL,
                    const rk::nn::TensorRole role = rk::nn::TensorRole::VAR,
                    const rk::nn::PrecisionType precision = rk::nn::PrecisionType::FLOAT32,

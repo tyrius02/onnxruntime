@@ -5,6 +5,7 @@
 #include <set>
 #include <unordered_set>
 #include <map>
+#include <memory>
 #include <utility>
 #include <functional>
 #include "rknpu_execution_provider.h"
@@ -12,6 +13,7 @@
 #include "core/framework/compute_capability.h"
 #include "core/session/onnxruntime_cxx_api.h"
 #include "core/session/inference_session.h"
+#include "core/graph/graph_proto_serializer.h"
 #include "core/graph/model.h"
 #include "core/framework/memcpy.h"
 #include "node_attr_helper.h"
@@ -20,6 +22,13 @@
 
 using std::string;
 using std::vector;
+
+namespace {
+struct KernelRegistryAndStatus {
+  std::shared_ptr<onnxruntime::KernelRegistry> kernel_registry = std::make_shared<onnxruntime::KernelRegistry>();
+  onnxruntime::Status st;
+};
+}  // namespace
 
 namespace onnxruntime {
 
@@ -253,7 +262,8 @@ common::Status RknpuExecutionProvider::Compile(const std::vector<FusedNodeAndGra
                              std::vector<ONNX_NAMESPACE::FunctionProto>(),
                              *GetLogger());
     ONNX_NAMESPACE::ModelProto model_proto = model.ToProto();
-    graph_body_viewer.ToProto(*model_proto->mutable_graph(), true, true);
+    // RKNPU EP is using static lib approach, so invoke serializer directly.
+    GraphViewerToProto(graph_body_viewer, *model_proto.mutable_graph(), true, true);
     model_proto.set_ir_version(ONNX_NAMESPACE::Version::IR_VERSION);
 
     // Build map from input name to its index in input definitions
@@ -438,10 +448,11 @@ common::Status RknpuExecutionProvider::Compile(const std::vector<FusedNodeAndGra
         const auto output_shape = output->GetDims();
         std::vector<int64_t>
             int64_output_shape(output_shape.begin(), output_shape.end());
-        const auto* output_tensor = ctx.GetOutput(
+        auto output_tensor = ctx.GetOutput(
             rk_state->output_indexes[i],
             int64_output_shape.data(),
             int64_output_shape.size());
+        ORT_ENFORCE(output_tensor.IsTensor());
         float* output_buf = output_tensor.GetTensorMutableData<float>();
 
         const auto type = output->GetPrecision();
@@ -514,30 +525,30 @@ class ONNX_OPERATOR_KERNEL_CLASS_NAME(
 class ONNX_OPERATOR_KERNEL_CLASS_NAME(
     kRknpuExecutionProvider, kOnnxDomain, 1, MemcpyToHost);
 
-static void RegisterRknpuKernels(KernelRegistry& kernel_registry) {
+static Status RegisterRknpuKernels(KernelRegistry& kernel_registry) {
   static const BuildKernelCreateInfoFn function_table[] = {
       BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kRknpuExecutionProvider, kOnnxDomain, 1, MemcpyFromHost)>,
       BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kRknpuExecutionProvider, kOnnxDomain, 1, MemcpyToHost)>,
   };
 
   for (auto& function_table_entry : function_table) {
-    kernel_registry.Register(function_table_entry());
+    ORT_RETURN_IF_ERROR(kernel_registry.Register(function_table_entry()));
   }
+
+  return Status::OK();
 }
 
-std::shared_ptr<KernelRegistry> GetRknpuKernelRegistry() {
-  std::shared_ptr<KernelRegistry> kernel_registry =
-      std::make_shared<KernelRegistry>();
-  RegisterRknpuKernels(*kernel_registry);
-
-  return kernel_registry;
+KernelRegistryAndStatus GetRknpuKernelRegistry() {
+  KernelRegistryAndStatus ret;
+  ret.st = RegisterRknpuKernels(*ret.kernel_registry);
+  return ret;
 }
 
 std::shared_ptr<KernelRegistry>
 RknpuExecutionProvider::GetKernelRegistry() const {
-  static std::shared_ptr<KernelRegistry> kernel_registry =
-      onnxruntime::GetRknpuKernelRegistry();
-  return kernel_registry;
+  static KernelRegistryAndStatus ret = GetRknpuKernelRegistry();
+  ORT_THROW_IF_ERROR(ret.st);
+  return ret.kernel_registry;
 }
 
 }  // namespace onnxruntime

@@ -35,10 +35,10 @@ namespace rknpu {
     const auto& tensor = rk_tensors_.at(name);            \
     const void* data = tensor->GetData();                 \
     rk::nn::PrecisionType fmt = tensor->GetPrecision();   \
-    uint32_t dim = 1;                                     \
+    int32_t dim = 1;                                     \
     if (tensor->GetDims().size() > 0)                     \
       dim = tensor->GetDims()[0];                         \
-    for (uint32_t i = 0; i < dim; i++) {                  \
+    for (int32_t i = 0; i < dim; i++) {                  \
       if (fmt == rk::nn::PrecisionType::UINT8 ||          \
           fmt == rk::nn::PrecisionType::INT8) {           \
         attr.push_back(((type*)data)[i]);                 \
@@ -94,7 +94,7 @@ OnnxConverter::FindActivation(const ONNX_NAMESPACE::ModelProto& model_proto,
 
 std::shared_ptr<rk::nn::Tensor>
 OnnxConverter::CreateRknnTensor(const std::string& name,
-                                const std::vector<uint32_t>& dims,
+                                const std::vector<int32_t>& dims,
                                 const void* data,
                                 const rk::nn::TensorRole role,
                                 const rk::nn::PrecisionType precision,
@@ -122,9 +122,9 @@ OnnxConverter::CreateRknnTensor(const std::string& name,
 void OnnxConverter::HandleInitializer() {
   for (const auto& tensor : model_proto_.graph().initializer()) {
     const std::string name = tensor.name();
-    std::vector<uint32_t> dims;
+    std::vector<int32_t> dims;
     for (const auto dim : tensor.dims()) {
-      dims.push_back(static_cast<uint32_t>(dim));
+      dims.push_back(static_cast<int32_t>(dim));
     }
     if (tensor.data_type() == ONNX_NAMESPACE::TensorProto_DataType_FLOAT) {
       const char* ptr = tensor.float_data().empty()
@@ -186,7 +186,7 @@ std::vector<std::shared_ptr<rk::nn::Tensor>> OnnxConverter::GetInputOfOnnxModel(
     for (const auto& dim : input.type().tensor_type().shape().dim()) {
       if (dim.value_case() ==
           ONNX_NAMESPACE::TensorShapeProto_Dimension::kDimValue) {
-        shape.push_back(static_cast<uint32_t>(dim.dim_value()));
+        shape.push_back(static_cast<int32_t>(dim.dim_value()));
       } else {
         throw std::invalid_argument(
             "The input of graph doesn't have dim_value");
@@ -250,7 +250,7 @@ OnnxConverter::GetOutputOfOnnxModel() {
 }
 
 Shaper::Shape GetShape(const ONNX_NAMESPACE::ModelProto& model_proto,
-                       const std::map<std::string, std::vector<uint32_t>>& tensor_dims,
+                       const std::map<std::string, std::vector<int32_t>>& tensor_dims,
                        const std::string& name) {
   Shaper::Shape shape;
   for (const auto& value_info : model_proto.graph().value_info()) {
@@ -546,9 +546,9 @@ std::vector<std::vector<int>> OnnxConverter::GetSupportedNodes(
     const ONNX_NAMESPACE::ModelProto& model_proto) {
   for (const auto& tensor : model_proto.graph().initializer()) {
     const std::string name = tensor.name();
-    std::vector<uint32_t> dims;
+    std::vector<int32_t> dims;
     for (const auto dim : tensor.dims()) {
-      dims.push_back(static_cast<uint32_t>(dim));
+      dims.push_back(static_cast<int32_t>(dim));
     }
     tensor_dims_[name] = dims;
   }
@@ -930,7 +930,7 @@ void OnnxConverter::AddLayerConvImpl(const std::string& input,
   shaper_.Conv(input, weight, pads, strides, auto_pad, output);
 
   std::vector<std::shared_ptr<rk::nn::Tensor>> inputs, outputs;
-  std::vector<uint32_t> weight_dims;
+  std::vector<int32_t> weight_dims;
   if (HAS(rk_tensors_, input)) {
     inputs.push_back(rk_tensors_.at(input));
   }
@@ -943,12 +943,12 @@ void OnnxConverter::AddLayerConvImpl(const std::string& input,
       inputs.push_back(rk_tensors_.at(bias));
     }
   } else {
-    uint32_t dim = shaper_[weight][0];
+    int32_t dim = shaper_[weight][0];
     void* ptr = (void*)malloc(sizeof(float) * dim);
     memset(ptr, 0, sizeof(float) * dim);
     free_list_.push_back(ptr);
 
-    std::vector<uint32_t> dims = {dim};
+    std::vector<int32_t> dims = {dim};
     auto rk_bias = CreateRknnTensor(bias, dims, ptr, rk::nn::TensorRole::CONST);
     inputs.push_back(rk_bias);
   }
@@ -1025,7 +1025,7 @@ void OnnxConverter::AddLayerQLinearConvImpl(const string& input,
   GET_ATTR(out_zp, output_zp, uint8_t);
 
   std::vector<std::shared_ptr<rk::nn::Tensor>> inputs, outputs;
-  std::vector<uint32_t> weight_dims;
+  std::vector<int32_t> weight_dims;
   if (HAS(rk_tensors_, input)) {
     rk::nn::QuantizationParamAffineAsymmetric param;
     param.scale.push_back(in_s[0]);
@@ -1052,12 +1052,12 @@ void OnnxConverter::AddLayerQLinearConvImpl(const string& input,
       inputs.push_back(tensor);
     }
   } else {
-    uint32_t dim = shaper_[weight][0];
+    int32_t dim = shaper_[weight][0];
     void* ptr = (void*)malloc(sizeof(int32_t) * dim);
     memset(ptr, 0, sizeof(int32_t) * dim);
     free_list_.push_back(ptr);
 
-    std::vector<uint32_t> dims = {dim};
+    std::vector<int32_t> dims = {dim};
     auto rk_bias = CreateRknnTensor(bias, dims, ptr, rk::nn::TensorRole::CONST,
                                     rk::nn::PrecisionType::INT32,
                                     rk::nn::DataLayoutType::NCHW,
@@ -1128,7 +1128,7 @@ void OnnxConverter::AddLayerDepthwiseConvImpl(
   shaper_.DepthwiseConv(input, weight, pads, strides, output);
 
   std::vector<std::shared_ptr<rk::nn::Tensor>> inputs, outputs;
-  std::vector<uint32_t> weight_dims;
+  std::vector<int32_t> weight_dims;
   if (HAS(rk_tensors_, input)) {
     inputs.push_back(rk_tensors_.at(input));
   }
@@ -1141,12 +1141,12 @@ void OnnxConverter::AddLayerDepthwiseConvImpl(
       inputs.push_back(rk_tensors_.at(bias));
     }
   } else {
-    uint32_t dim = shaper_[weight][0];
+    int32_t dim = shaper_[weight][0];
     void* ptr = (void*)malloc(sizeof(float) * dim);
     memset(ptr, 0, sizeof(float) * dim);
     free_list_.push_back(ptr);
 
-    std::vector<uint32_t> dims = {dim};
+    std::vector<int32_t> dims = {dim};
     auto rk_bias = CreateRknnTensor(bias, dims, ptr, rk::nn::TensorRole::CONST);
     inputs.push_back(rk_bias);
   }
@@ -1362,7 +1362,7 @@ void OnnxConverter::AddLayerFC(const std::string& input,
   shaper_.FC(input, weight, output);
 
   std::vector<std::shared_ptr<rk::nn::Tensor>> inputs, outputs;
-  std::vector<uint32_t> weight_dims;
+  std::vector<int32_t> weight_dims;
   if (HAS(rk_tensors_, input)) {
     inputs.push_back(rk_tensors_.at(input));
   }
@@ -1375,12 +1375,12 @@ void OnnxConverter::AddLayerFC(const std::string& input,
       inputs.push_back(rk_tensors_.at(bias));
     }
   } else {
-    uint32_t dim = shaper_[weight][0];
+    int32_t dim = shaper_[weight][0];
     void* ptr = (void*)malloc(sizeof(float) * dim);
     memset(ptr, 0, sizeof(float) * dim);
     free_list_.push_back(ptr);
 
-    std::vector<uint32_t> dims = {dim};
+    std::vector<int32_t> dims = {dim};
     auto rk_bias = CreateRknnTensor(bias, dims, ptr, rk::nn::TensorRole::CONST);
     inputs.push_back(rk_bias);
   }
@@ -1554,7 +1554,7 @@ void OnnxConverter::AddLayerReshape(const string& input,
 
   rk::nn::ReshapeAttr attr;
   for (const auto dim : shaper_[output]) {
-    attr.shapes.push_back(static_cast<uint32_t>(dim));
+    attr.shapes.push_back(static_cast<int32_t>(dim));
   }
   graph_->AddOperator(rk::nn::OperatorType::RESHAPE,
                       inputs, outputs, (void*)&attr);
@@ -1570,7 +1570,7 @@ void OnnxConverter::AddLayerFlatten(const string& input,
     const auto in_shape = shaper_[input];
     shape[0] = (int32_t)std::accumulate(in_shape.begin(),
                                         in_shape.begin() + axis, 1,
-                                        std::multiplies<uint32_t>());
+                                        std::multiplies<int32_t>());
   }
 
   shaper_.Reshape(input, shape, output);
@@ -1591,7 +1591,7 @@ void OnnxConverter::AddLayerFlatten(const string& input,
 
   rk::nn::ReshapeAttr attr;
   for (const auto dim : shaper_[output]) {
-    attr.shapes.push_back(static_cast<uint32_t>(dim));
+    attr.shapes.push_back(static_cast<int32_t>(dim));
   }
   graph_->AddOperator(rk::nn::OperatorType::RESHAPE,
                       inputs, outputs, (void*)&attr);
@@ -1620,7 +1620,7 @@ void OnnxConverter::AddLayerTranspose(const string& input,
 
   rk::nn::PermuteAttr attr;
   for (const auto val : perm) {
-    attr.perm.push_back(static_cast<uint32_t>(val));
+    attr.perm.push_back(static_cast<int32_t>(val));
   }
   graph_->AddOperator(rk::nn::OperatorType::PERMUTE,
                       inputs, outputs, (void*)&attr);
@@ -1666,7 +1666,7 @@ void OnnxConverter::AddLayerSlice(const string& input,
 
   for (const auto dim : shaper_[output]) {
     attr.start.push_back(0);
-    attr.length.push_back(static_cast<uint32_t>(dim));
+    attr.length.push_back(static_cast<int32_t>(dim));
   }
 
   const auto input_dims = shaper_[input];
@@ -1705,7 +1705,7 @@ void OnnxConverter::AddLayerSqueeze(const string& input,
 
   rk::nn::ReshapeAttr attr;
   for (const auto dim : shaper_[output]) {
-    attr.shapes.push_back(static_cast<uint32_t>(dim));
+    attr.shapes.push_back(static_cast<int32_t>(dim));
   }
   graph_->AddOperator(rk::nn::OperatorType::RESHAPE,
                       inputs, outputs, (void*)&attr);
@@ -1734,7 +1734,7 @@ void OnnxConverter::AddLayerUnsqueeze(const string& input,
 
   rk::nn::ReshapeAttr attr;
   for (const auto dim : shaper_[output]) {
-    attr.shapes.push_back(static_cast<uint32_t>(dim));
+    attr.shapes.push_back(static_cast<int32_t>(dim));
   }
   graph_->AddOperator(rk::nn::OperatorType::RESHAPE,
                       inputs, outputs, (void*)&attr);
